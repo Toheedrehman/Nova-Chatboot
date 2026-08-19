@@ -9,17 +9,7 @@ const authRoutes = require("./routes/authRoutes");
 const conversationRoutes = require("./routes/conversationRoutes");
 const chatRoutes = require("./routes/chatRoutes");
 
-// =====================================================
-// APP
-// =====================================================
-
 const app = express();
-
-// =====================================================
-// DATABASE
-// =====================================================
-
-connectDB();
 
 // =====================================================
 // CORS
@@ -29,15 +19,12 @@ const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
   "http://localhost:3001",
-
-  // Production frontend
   "https://nova-chatboot-zouf.vercel.app",
 ];
 
 const corsOptions = {
-  origin: function (origin, callback) {
-    // Allow requests without an Origin header
-    // such as server-to-server requests.
+  origin: (origin, callback) => {
+    // Server-to-server / curl / health checks
     if (!origin) {
       return callback(null, true);
     }
@@ -46,11 +33,7 @@ const corsOptions = {
       return callback(null, true);
     }
 
-    console.error("Blocked CORS origin:", origin);
-
-    // Do NOT throw here.
-    // Returning false prevents crashing the
-    // serverless function because of CORS.
+    console.error("CORS blocked:", origin);
     return callback(null, false);
   },
 
@@ -71,11 +54,51 @@ const corsOptions = {
   ],
 };
 
-// Apply CORS BEFORE routes
 app.use(cors(corsOptions));
 
-// Handle browser preflight requests
-app.options("*", cors(corsOptions));
+// Explicit OPTIONS handler
+app.options(/.*/, cors(corsOptions));
+
+// =====================================================
+// EXPLICIT CORS HEADER
+// =====================================================
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+
+  if (origin && allowedOrigins.includes(origin)) {
+    res.header(
+      "Access-Control-Allow-Origin",
+      origin
+    );
+    res.header(
+      "Access-Control-Allow-Credentials",
+      "true"
+    );
+  }
+
+  res.header(
+    "Access-Control-Allow-Methods",
+    "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+  );
+
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization"
+  );
+
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+
+  next();
+});
+
+// =====================================================
+// DATABASE
+// =====================================================
+
+connectDB();
 
 // =====================================================
 // BODY PARSER
@@ -109,10 +132,7 @@ app.get("/", (req, res) => {
 // AUTH
 // =====================================================
 
-app.use(
-  "/api/auth",
-  authRoutes
-);
+app.use("/api/auth", authRoutes);
 
 // =====================================================
 // CONVERSATIONS
@@ -127,10 +147,7 @@ app.use(
 // AI CHAT
 // =====================================================
 
-app.use(
-  "/api/chat",
-  chatRoutes
-);
+app.use("/api/chat", chatRoutes);
 
 // =====================================================
 // 404
@@ -150,12 +167,26 @@ app.use((req, res) => {
 app.use((error, req, res, next) => {
   console.error("Server error:", error);
 
-  // CORS errors or other errors
+  const origin = req.headers.origin;
+
+  if (
+    origin &&
+    allowedOrigins.includes(origin)
+  ) {
+    res.header(
+      "Access-Control-Allow-Origin",
+      origin
+    );
+    res.header(
+      "Access-Control-Allow-Credentials",
+      "true"
+    );
+  }
+
   res.status(error.status || 500).json({
     success: false,
     message:
-      error.message ||
-      "Server error",
+      error.message || "Server error",
   });
 });
 
@@ -164,8 +195,7 @@ app.use((error, req, res, next) => {
 // =====================================================
 
 if (process.env.NODE_ENV !== "production") {
-  const PORT =
-    process.env.PORT || 5000;
+  const PORT = process.env.PORT || 5000;
 
   app.listen(PORT, () => {
     console.log(
