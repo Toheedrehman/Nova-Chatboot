@@ -28,31 +28,54 @@ connectDB();
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:3000",
+  "http://localhost:3001",
 
-  // Add your real Vercel frontend URL here later
-  // "https://your-real-nova-frontend.vercel.app",
+  // Production frontend
+  "https://nova-chatboot-zouf.vercel.app",
 ];
 
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      // Allow requests such as Postman/server requests
-      if (!origin) {
-        return callback(null, true);
-      }
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests without an Origin header
+    // such as server-to-server requests.
+    if (!origin) {
+      return callback(null, true);
+    }
 
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
 
-      return callback(
-        new Error("Not allowed by CORS")
-      );
-    },
+    console.error("Blocked CORS origin:", origin);
 
-    credentials: true,
-  })
-);
+    // Do NOT throw here.
+    // Returning false prevents crashing the
+    // serverless function because of CORS.
+    return callback(null, false);
+  },
+
+  credentials: true,
+
+  methods: [
+    "GET",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+    "OPTIONS",
+  ],
+
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+  ],
+};
+
+// Apply CORS BEFORE routes
+app.use(cors(corsOptions));
+
+// Handle browser preflight requests
+app.options("*", cors(corsOptions));
 
 // =====================================================
 // BODY PARSER
@@ -67,6 +90,7 @@ app.use(
 app.use(
   express.urlencoded({
     extended: true,
+    limit: "10mb",
   })
 );
 
@@ -82,7 +106,7 @@ app.get("/", (req, res) => {
 });
 
 // =====================================================
-// AUTH ROUTES
+// AUTH
 // =====================================================
 
 app.use(
@@ -91,7 +115,7 @@ app.use(
 );
 
 // =====================================================
-// CONVERSATION ROUTES
+// CONVERSATIONS
 // =====================================================
 
 app.use(
@@ -100,7 +124,7 @@ app.use(
 );
 
 // =====================================================
-// AI CHAT ROUTES
+// AI CHAT
 // =====================================================
 
 app.use(
@@ -109,7 +133,7 @@ app.use(
 );
 
 // =====================================================
-// 404 HANDLER
+// 404
 // =====================================================
 
 app.use((req, res) => {
@@ -123,31 +147,35 @@ app.use((req, res) => {
 // ERROR HANDLER
 // =====================================================
 
-app.use(
-  (error, req, res, next) => {
-    console.error(
-      "Server error:",
-      error
-    );
+app.use((error, req, res, next) => {
+  console.error("Server error:", error);
 
-    res.status(500).json({
-      success: false,
-      message:
-        error.message ||
-        "Server error",
-    });
-  }
-);
-
-// =====================================================
-// START SERVER
-// =====================================================
-
-const PORT =
-  process.env.PORT || 5000;
-
-app.listen(PORT, () => {
-  console.log(
-    `Nova server running on http://localhost:${PORT}`
-  );
+  // CORS errors or other errors
+  res.status(error.status || 500).json({
+    success: false,
+    message:
+      error.message ||
+      "Server error",
+  });
 });
+
+// =====================================================
+// LOCAL DEVELOPMENT ONLY
+// =====================================================
+
+if (process.env.NODE_ENV !== "production") {
+  const PORT =
+    process.env.PORT || 5000;
+
+  app.listen(PORT, () => {
+    console.log(
+      `Nova server running on http://localhost:${PORT}`
+    );
+  });
+}
+
+// =====================================================
+// VERCEL
+// =====================================================
+
+module.exports = app;
